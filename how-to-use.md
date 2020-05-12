@@ -5,8 +5,10 @@ OpenShiftのprojectを2つつくる。
 アプリケーションが動作するために必要なリソースを確保しておくため、アプリケーションが動作するprojectと開発に必要なツールは分離しておくことをおすすめする。
 
 ```
-$ oc new-project app-development
-$ oc new-project app-devops
+$ export PJ_DEVELOPMENT=user1-development
+$ export PJ_DEVOPS=user1-devops
+$ oc new-project $PJ_DEVELOPMENT
+$ oc new-project $PJ_DEVOPS
 ```
 
 ## Jenkins起動
@@ -14,14 +16,14 @@ Jenkinsを起動する。Jenkinsは動作が重いため、必要に応じて`re
 また、Jenkinsはのちに`app-development`のリソースを操作するために権限を付与しておく。
 
 ```
-$ oc new-app jenkins-persistent --param ENABLE_OAUTH=true --param MEMORY_LIMIT=2Gi --param VOLUME_CAPACITY=10Gi --param DISABLE_ADMINISTRATIVE_MONITORS=true
+$ oc new-app jenkins-persistent --param ENABLE_OAUTH=true --param MEMORY_LIMIT=2Gi --param VOLUME_CAPACITY=10Gi --param DISABLE_ADMINISTRATIVE_MONITORS=true -n $PJ_DEVOPS
 ...
 --> Success
     Access your application via route 'jenkins-app-devops.apps.na311.openshift.opentlc.com'
     Run 'oc status' to view your app.
 
-$ oc policy add-role-to-user edit system:serviceaccount:app-devops:jenkins -n app-development
-clusterrole.rbac.authorization.k8s.io/edit added: "system:serviceaccount:app-devops:jenkins"
+$ oc policy add-role-to-user edit system:serviceaccount:$PJ_DEVOPS:jenkins -n $PJ_DEVELOPMENT
+clusterrole.rbac.authorization.k8s.io/edit added: "system:serviceaccount:user1-devops:jenkins"
 ```
 
 ## Slave imageの作成
@@ -31,16 +33,22 @@ Jenkinsパイプラインを実際に動作させるJenkins slaveのイメージ
 
 ```
 $ cat etc/Dockerfile_jenkins_agent
-$ oc process -f openshift/custom-jenkins-agent.yaml | oc apply -n app-devops -f -
+$ oc process -f openshift/custom-jenkins-agent.yaml | oc apply -n $PJ_DEVOPS -f -
 buildconfig.build.openshift.io/custom-jenkins-agent-maven created
 imagestream.image.openshift.io/custom-jenkins-agent-maven created
 
-$ oc start-build custom-jenkins-agent-maven -n app-devops
+$ oc start-build custom-jenkins-agent-maven -n $PJ_DEVOPS
 ```
 
 ## Jenkinsの設定
 おそらく、上のSlave Imageを作っている間にJenkinsが起動したはずだ。
 Jenkins側の設定をいくつか行う。
+
+JenkinsへのアクセスURLがわからない方はこのコマンドで確認できます。
+
+```
+$ oc get route jenkins -o jsonpath='{.spec.host}' -n $PJ_DEVOPS
+```
 
 ### プラグイン
 本サンプルで利用する、Jekinsfileの記述ではデフォルのプラグインでは古く動作しないためアップデートを行う。
